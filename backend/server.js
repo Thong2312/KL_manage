@@ -6,6 +6,7 @@ const fileUpload = require('express-fileupload');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
 require('dotenv').config();
+console.log("DEBUG: JWT_SECRET from .env =", process.env.JWT_SECRET);
 
 // connection to DB and cloudinary
 const { connectDB } = require('./config/database');
@@ -24,7 +25,7 @@ app.use(cookieParser());
 app.use(
     cors({
         // origin: 'http://localhost:5173', // frontend link
-        origin: "http://localhost:5173",
+        origin: "*",
         credentials: true
     })
 );
@@ -51,9 +52,6 @@ app.use('/api/v1/auth', userRoutes);
 app.use('/api/v1/profile', profileRoutes);
 app.use('/api/v1/payment', paymentRoutes);
 app.use('/api/v1/course', courseRoutes);
-
-
-
 
 // Default Route
 app.get('/', (req, res) => {

@@ -1,6 +1,9 @@
 const BASE_URL = import.meta.env.VITE_APP_BASE_URL;
 
-console.log("DEBUG: BASE_URL from .env →", BASE_URL); // Kiểm tra giá trị
+console.log("DEBUG: BASE_URL from .env →", import.meta.env.VITE_APP_BASE_URL);
+if (!import.meta.env.VITE_APP_BASE_URL) {
+    console.error("❌ LỖI: Biến VITE_APP_BASE_URL không được tải từ .env!");
+}
 
 // AUTH ENDPOINTS
 export const endpoints = {
@@ -53,12 +56,12 @@ export const ratingsEndpoints = {
 // CATAGORIES API
 export const categories = {
   CATEGORIES_API: BASE_URL + "/course/showAllCategories",
-}
+};
 
 // CATALOG PAGE DATA
 export const catalogData = {
   CATALOGPAGEDATA_API: BASE_URL + "/course/getCategoryPageDetails",
-}
+};
 // CONTACT-US API
 export const contactusEndpoint = {
   CONTACT_US_API: BASE_URL + "/reach/contact",

@@ -13,96 +13,115 @@ const { convertSecondsToDuration } = require("../utils/secToDuration")
 // ================ create new course ================
 exports.createCourse = async (req, res) => {
     try {
-        // extract data
+        console.log("DEBUG: Received request at /createCourse");
+        console.log("DEBUG: Headers:", req.headers);
+        console.log("DEBUG: Request body:", req.body);
+        console.log("DEBUG: Token from headers:", req.headers.authorization);
+        console.log("DEBUG: Uploaded file:", req.files?.thumbnailImage);
+
         let { courseName, courseDescription, whatYouWillLearn, price, category, instructions: _instructions, status, tag: _tag } = req.body;
 
-        // Convert the tag and instructions from stringified Array to Array
-        const tag = JSON.parse(_tag)
-        const instructions = JSON.parse(_instructions)
+        // Kiểm tra dữ liệu đầu vào
+        if (!_tag || !_instructions) {
+            console.log("❌ Lỗi: Tag và instructions không được để trống");
+            return res.status(400).json({ success: false, message: "Tag và instructions không được để trống" });
+        }
 
-        // console.log("tag = ", tag)
-        // console.log("instructions = ", instructions)
+        // Convert `tag` và `instructions` sang array
+        let tag, instructions;
+        try {
+            tag = typeof _tag === "string" ? JSON.parse(_tag) : _tag;
+            instructions = typeof _instructions === "string" ? JSON.parse(_instructions) : _instructions;
+        } catch (error) {
+            console.log("❌ DEBUG: Lỗi khi parse JSON -", error.message);
+            return res.status(400).json({ success: false, message: "Tag hoặc instructions không hợp lệ" });
+        }
 
-        // get thumbnail of course
+        console.log("✅ DEBUG: tag =", tag);
+        console.log("✅ DEBUG: instructions =", instructions);
+
         const thumbnail = req.files?.thumbnailImage;
 
-        // validation
-        if (!courseName || !courseDescription || !whatYouWillLearn || !price
-            || !category || !thumbnail || !instructions.length || !tag.length) {
+        if (!courseName || !courseDescription || !whatYouWillLearn || !price || !category || !thumbnail || !instructions.length || !tag.length) {
+            console.log("❌ DEBUG: Thiếu dữ liệu khi tạo khóa học.");
             return res.status(400).json({
                 success: false,
-                message: 'All Fileds are required'
+                message: "All fields are required"
             });
         }
 
-        if (!status || status === undefined) {
-            status = "Draft";
+        if (!status) status = "Draft";
+
+        // Kiểm tra user có phải instructor không
+        const instructorId = req.user?.id;
+        if (!instructorId) {
+            console.log("❌ DEBUG: Unauthorized - User ID missing");
+            return res.status(401).json({ success: false, message: "Unauthorized - User ID missing" });
         }
 
-        // check current user is instructor or not , bcoz only instructor can create 
-        // we have insert user id in req.user , (payload , while auth ) 
-        const instructorId = req.user.id;
-
-
-        // check given category is valid or not
+        // Kiểm tra category có hợp lệ không
+        console.log("DEBUG: Checking category ID:", category);
         const categoryDetails = await Category.findById(category);
         if (!categoryDetails) {
-            return res.status(401).json({
-                success: false,
-                message: 'Category Details not found'
-            })
+            console.log("❌ DEBUG: Category không tồn tại - ID:", category);
+            return res.status(404).json({ success: false, message: "Category Details not found" });
         }
 
+        // Upload thumbnail lên Cloudinary
+        let thumbnailDetails;
+        try {
+            thumbnailDetails = await uploadImageToCloudinary(thumbnail, process.env.FOLDER_NAME);
+            console.log("✅ DEBUG: Ảnh tải lên Cloudinary thành công:", thumbnailDetails.secure_url);
+        } catch (error) {
+            console.log("❌ DEBUG: Lỗi khi upload ảnh lên Cloudinary -", error.message);
+            return res.status(500).json({ success: false, message: "Error uploading thumbnail" });
+        }
 
-        // upload thumbnail to cloudinary
-        const thumbnailDetails = await uploadImageToCloudinary(thumbnail, process.env.FOLDER_NAME);
-
-        // create new course - entry in DB
+        // Tạo khóa học mới trong MongoDB
+        console.log("DEBUG: Tạo khóa học mới trong MongoDB...");
         const newCourse = await Course.create({
-            courseName, courseDescription, instructor: instructorId, whatYouWillLearn, price, category: categoryDetails._id,
-            tag, status, instructions, thumbnail: thumbnailDetails.secure_url, createdAt: Date.now(),
+            courseName,
+            courseDescription,
+            instructor: instructorId,
+            whatYouWillLearn,
+            price,
+            category: categoryDetails._id,
+            tag,
+            status,
+            instructions,
+            thumbnail: thumbnailDetails.secure_url,
+            createdAt: Date.now(),
         });
 
-        // add course id to instructor courses list, this is bcoz - it will show all created courses by instructor 
-        await User.findByIdAndUpdate(instructorId,
-            {
-                $push: {
-                    courses: newCourse._id
-                }
-            },
-            { new: true }
-        );
+        console.log("✅ DEBUG: Khóa học mới được tạo:", newCourse);
 
+        // Thêm khóa học vào danh sách của instructor
+        await User.findByIdAndUpdate(instructorId, {
+            $push: { courses: newCourse._id }
+        });
 
-        // Add the new course to the Categories
-        await Category.findByIdAndUpdate(
-            { _id: category },
-            {
-                $push: {
-                    courses: newCourse._id,
-                },
-            },
-            { new: true }
-        );
+        // Thêm khóa học vào danh mục
+        await Category.findByIdAndUpdate(category, {
+            $push: { courses: newCourse._id }
+        });
 
-        // return response
         res.status(200).json({
             success: true,
             data: newCourse,
-            message: 'New Course created successfully'
-        })
+            message: "New Course created successfully"
+        });
     }
-
     catch (error) {
-        console.log('Error while creating new course');
-        console.log(error);
+        console.log("❌ DEBUG: Lỗi khi tạo khóa học -", error);
         res.status(500).json({
             success: false,
             error: error.message,
-            message: 'Error while creating new course'
-        })
+            message: "Error while creating new course"
+        });
     }
-}
+};
+
+
 
 
 // ================ show all courses ================
